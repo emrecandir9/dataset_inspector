@@ -75,12 +75,22 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 .landing-format-pill{padding:6px 16px;border-radius:20px;border:1px solid var(--border-primary);font-size:12px;color:var(--text-quaternary);letter-spacing:.3px}
 .landing-error{margin-top:20px;color:var(--color-error);font-size:13px;max-width:520px;padding:12px 16px;background:var(--color-error-dim);border-radius:8px}
 
-/* ---- Loading ---- */
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:12px;width:100%;max-width:400px;margin:0 auto}
-.progress-bar{width:100%;height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;position:relative}
-.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s ease;width:0%}
-.loading-stage{font-size:15px;color:var(--text-primary);font-weight:500;margin-top:16px}
-.loading-hint{font-size:13px;color:var(--text-tertiary);text-align:center}
+/* ---- Loading Wizard ---- */
+.loading-view{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;}
+.wizard{width:100%;max-width:360px;display:flex;flex-direction:column;gap:24px;}
+.wizard-stage{display:flex;align-items:center;gap:16px;opacity:0.4;transition:all 0.3s;}
+.wizard-stage.active, .wizard-stage.done{opacity:1;}
+.wizard-circle{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);position:relative;flex-shrink:0;transition:all 0.3s;}
+.wizard-circle .tick-svg{width:22px;height:22px;color:#fff;}
+.wizard-circle .pct{font-size:11px;font-weight:700;color:var(--text-primary);z-index:2;}
+.wizard-info{flex:1;}
+.wizard-title{font-size:15px;font-weight:600;color:var(--text-primary);}
+.wizard-desc{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
+.wizard-stage.active .wizard-circle{background:conic-gradient(var(--accent) var(--progress, 0%), var(--bg-elevated) 0%);}
+.wizard-stage.active .wizard-circle::after{content:'';position:absolute;inset:3px;background:var(--bg-surface);border-radius:50%;z-index:1;}
+.wizard-stage.done .wizard-circle{background:var(--color-success);transform:scale(1.05);}
+.tick-svg{stroke-dasharray:50;stroke-dashoffset:50;animation:drawTick 0.4s ease forwards;animation-delay:0.1s;}
+@keyframes drawTick{to{stroke-dashoffset:0;}}
 
 /* ---- Mode Toggle ---- */
 .mode-toggle{display:flex;gap:6px;background:var(--bg-surface);padding:4px;border-radius:10px;border:1px solid var(--border-primary);margin-bottom:8px;width:100%;max-width:320px}
@@ -293,7 +303,8 @@ function renderLanding() {
     e.preventDefault();
     const path = document.getElementById('path-input').value.trim();
     if (!path) return;
-    showLoading('Starting analysis...', 0, 'Initializing job...');
+    wizardContainer = null;
+    updateWizard({ status: 'pending', stage: 'Initializing...', message: 'Connecting to engine...' });
     try {
       const res = await apiPost('/analyze', { path, mode: analysisMode });
       if (res.job_id) {
@@ -337,7 +348,7 @@ function startProgressStream(jobId) {
       render();
       document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
     } else {
-      showLoading(data.stage, data.progress, data.message);
+      updateWizard(data);
     }
   };
   es.onerror = () => {
@@ -347,14 +358,51 @@ function startProgressStream(jobId) {
   };
 }
 
-function showLoading(stage, pct, detail) {
-  const root = document.getElementById('root');
-  root.innerHTML = '';
-  root.appendChild(h('div', { className: 'loading' },
-    h('div', { className: 'progress-bar' }, h('div', { className: 'progress-fill', style: { width: (pct * 100) + '%' } })),
-    h('div', { className: 'loading-stage' }, stage),
-    h('div', { className: 'loading-hint' }, detail || 'This may take a moment for large datasets'),
-  ));
+let wizardContainer = null;
+const WIZARD_STAGES = [
+  { id: 'scanning', title: 'Scanning Filesystem' },
+  { id: 'detecting', title: 'Detecting Format' },
+  { id: 'loading', title: 'Loading Dataset' },
+  { id: 'analyzing', title: 'Running Analyzers' }
+];
+
+function updateWizard(data) {
+  if (!wizardContainer) {
+    wizardContainer = h('div', { className: 'wizard' });
+    const root = document.getElementById('root');
+    root.innerHTML = '';
+    root.appendChild(h('div', { className: 'loading-view' }, wizardContainer));
+  }
+  
+  wizardContainer.innerHTML = '';
+  let currentFound = false;
+  
+  WIZARD_STAGES.forEach(stageDef => {
+    let state = 'pending';
+    let pct = 0;
+    
+    if (data.status === stageDef.id) {
+      state = 'active';
+      pct = Math.round((data.stage_progress || 0) * 100);
+      currentFound = true;
+    } else if (!currentFound) {
+      state = 'done';
+      pct = 100;
+    }
+    
+    const checkSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="tick-svg"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    const circleInner = state === 'done' ? checkSvg : `<span class="pct">${pct}%</span>`;
+    
+    const circleStyle = state === 'active' ? { '--progress': pct + '%' } : {};
+    const circle = h('div', { className: 'wizard-circle', innerHTML: circleInner, style: circleStyle });
+    
+    const info = h('div', { className: 'wizard-info' },
+      h('div', { className: 'wizard-title' }, state === 'active' ? (data.stage || stageDef.title) : stageDef.title),
+      h('div', { className: 'wizard-desc' }, state === 'active' ? data.message : (state === 'done' ? 'Complete' : 'Pending...'))
+    );
+    
+    wizardContainer.appendChild(h('div', { className: 'wizard-stage ' + state }, circle, info));
+  });
 }
 
 // ===================== APP =====================

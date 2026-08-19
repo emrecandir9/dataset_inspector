@@ -259,5 +259,6 @@ class ProgressUpdate(BaseModel):
     status: AnalysisStatus
     stage: str  # human-readable stage name
     progress: float  # 0.0 - 1.0
+    stage_progress: float = 0.0  # 0.0 - 1.0 (progress of current stage)
     message: str = ""
     detail: str = ""

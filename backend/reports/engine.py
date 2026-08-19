@@ -66,37 +66,38 @@ def run_analysis(
     """
     start_time = time.time()
     
-    def _progress(status: AnalysisStatus, stage: str, progress: float, message: str = ""):
+    def _progress(status: AnalysisStatus, stage: str, progress: float, stage_progress: float = 0.0, message: str = ""):
         if progress_callback:
             progress_callback(ProgressUpdate(
                 status=status,
                 stage=stage,
                 progress=progress,
+                stage_progress=stage_progress,
                 message=message,
             ))
     
     report = DatasetReport(dataset_path=dataset_path)
     
     # --- Stage 1: Scan ---
-    _progress(AnalysisStatus.SCANNING, "Scanning filesystem", 0.05, "Walking directory tree...")
+    _progress(AnalysisStatus.SCANNING, "Scanning filesystem", 0.05, 0.3, "Walking directory tree...")
     scan_result = scan_directory(dataset_path)
     report.scan_result = scan_result
     
-    _progress(AnalysisStatus.SCANNING, "Scanning filesystem", 0.15,
+    _progress(AnalysisStatus.SCANNING, "Scanning filesystem", 0.15, 1.0,
               f"Found {scan_result.total_files:,} files ({_format_bytes(scan_result.total_size_bytes)})")
     
     if scan_result.total_files == 0:
-        _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, "No files found")
+        _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, 1.0, "No files found")
         report.analysis_duration_seconds = time.time() - start_time
         return report
     
     # --- Stage 2: Detect format ---
-    _progress(AnalysisStatus.DETECTING, "Detecting format", 0.20, "Analyzing file types...")
+    _progress(AnalysisStatus.DETECTING, "Detecting format", 0.20, 0.3, "Analyzing file types...")
     detection = detect_format(scan_result)
     report.detection = detection
     
     if not detection.selected:
-        _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, "Could not detect dataset format")
+        _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, 1.0, "Could not detect dataset format")
         report.analysis_duration_seconds = time.time() - start_time
         return report
     
@@ -108,15 +109,15 @@ def run_analysis(
                 selected = h
                 break
     
-    _progress(AnalysisStatus.DETECTING, "Detecting format", 0.25,
+    _progress(AnalysisStatus.DETECTING, "Detecting format", 0.25, 1.0,
               f"Detected: {selected.dataset_type} ({selected.confidence:.0%} confidence)")
     
     # --- Stage 3: Load ---
-    _progress(AnalysisStatus.LOADING, "Loading dataset", 0.30, "Loading data...")
+    _progress(AnalysisStatus.LOADING, "Loading dataset", 0.30, 0.2, "Loading data...")
     
     loader = get_loader(selected.loader_id)
     if not loader:
-        _progress(AnalysisStatus.ERROR, "Error", 0.30, f"No loader for: {selected.loader_id}")
+        _progress(AnalysisStatus.ERROR, "Error", 0.30, 0.0, f"No loader for: {selected.loader_id}")
         report.analysis_duration_seconds = time.time() - start_time
         return report
     
@@ -127,7 +128,7 @@ def run_analysis(
     if schema.sample_size:
         mode_label = f" (sampled {schema.sample_size:,} of {schema.num_samples:,})"
     
-    _progress(AnalysisStatus.LOADING, "Loading dataset", 0.40,
+    _progress(AnalysisStatus.LOADING, "Loading dataset", 0.40, 0.8,
               f"Loaded {schema.num_samples:,} samples{mode_label}")
     
     # --- Stage 4: Load data for analyzers ---
@@ -135,28 +136,32 @@ def run_analysis(
     if "tabular" in schema.capabilities:
         # Re-read for analysis
         data = _load_tabular_data(schema, scan_result, sample_size)
+        
+    _progress(AnalysisStatus.LOADING, "Loading dataset", 0.45, 1.0, "Ready for analysis")
     
     # --- Stage 5: Run analyzers ---
-    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.50, "Starting analysis...")
+    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.50, 0.1, "Starting analysis...")
     
     results = run_all_analyzers(schema, data)
     report.analyzer_results = results
     
-    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.85,
+    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.85, 1.0,
               f"Completed {len(results)} analyzers")
     
     # --- Stage 6: Health score ---
-    _progress(AnalysisStatus.ANALYZING, "Computing health score", 0.90, "Calculating...")
+    _progress(AnalysisStatus.ANALYZING, "Computing health score", 0.90, 0.5, "Calculating...")
     health = calculate_health_score(schema, results)
     report.health = health
     
     # --- Stage 7: Generate examples ---
-    _progress(AnalysisStatus.ANALYZING, "Generating examples", 0.95, "Preparing samples...")
+    _progress(AnalysisStatus.ANALYZING, "Generating examples", 0.95, 0.9, "Preparing samples...")
     report.examples = _generate_examples(schema, data)
+    
+    _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, 1.0, "Analysis complete")
     
     # --- Done ---
     report.analysis_duration_seconds = round(time.time() - start_time, 2)
-    _progress(AnalysisStatus.COMPLETE, "Complete", 1.0,
+    _progress(AnalysisStatus.COMPLETE, "Complete", 1.0, 1.0,
               f"Analysis complete in {report.analysis_duration_seconds:.1f}s — Health: {health.score:.0f}/100")
     
     return report
