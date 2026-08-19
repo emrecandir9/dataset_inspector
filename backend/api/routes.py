@@ -57,6 +57,33 @@ async def get_report() -> Dict[str, Any]:
     return {"status": "success", "report": _current_report.model_dump()}
 
 
+@router.get("/browse")
+async def browse_folder() -> Dict[str, Any]:
+    """Open a native folder picker and return the absolute path."""
+    import subprocess
+    import sys
+    try:
+        if sys.platform == "darwin":
+            # macOS native folder picker via AppleScript
+            script = 'tell application (path to frontmost application as text) to set myFolder to choose folder\nPOSIX path of myFolder'
+            result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+            if result.returncode == 0:
+                return {"path": result.stdout.strip()}
+        else:
+            # Fallback for other OS using tkinter
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.wm_attributes('-topmost', 1)
+            path = filedialog.askdirectory()
+            if path:
+                return {"path": path}
+        return {"path": ""}
+    except Exception as e:
+        return {"path": "", "error": str(e)}
+
+
 @router.get("/report/export")
 async def export_report(
     format: str = Query(default="json", description="Export format: json, html, markdown"),

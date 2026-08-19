@@ -60,11 +60,14 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 .landing-eyebrow{font-size:12px;font-weight:600;color:var(--accent-soft);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px}
 .landing-title{font-size:52px;font-weight:700;letter-spacing:-1.5px;line-height:1.1;margin-bottom:16px;background:linear-gradient(180deg,#fff 40%,var(--text-tertiary) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .landing-subtitle{font-size:17px;color:var(--text-tertiary);max-width:440px;line-height:1.6;margin-bottom:56px}
-.landing-form{display:flex;gap:12px;width:100%;max-width:520px;position:relative;z-index:1}
+.landing-form{display:flex;flex-direction:column;gap:20px;width:100%;max-width:560px;position:relative;z-index:1;align-items:center}
+.landing-input-group{display:flex;gap:12px;width:100%}
 .landing-input{flex:1;padding:14px 20px;background:var(--bg-surface);border:1px solid var(--border-primary);border-radius:12px;color:var(--text-primary);font-size:15px;font-family:inherit;outline:none;transition:all .2s ease}
 .landing-input::placeholder{color:var(--text-quaternary)}
 .landing-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
-.landing-btn{padding:14px 28px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s ease;white-space:nowrap}
+.landing-browse-btn{padding:14px 20px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border-primary);border-radius:12px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s ease;white-space:nowrap}
+.landing-browse-btn:hover{background:var(--bg-hover);border-color:var(--border-secondary)}
+.landing-btn{padding:14px 40px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s ease;white-space:nowrap;width:100%;max-width:240px}
 .landing-btn:hover{background:var(--accent-soft);transform:translateY(-1px);box-shadow:0 4px 12px rgba(10,132,255,.3)}
 .landing-btn:active{transform:translateY(0)}
 .landing-btn:disabled{opacity:.3;cursor:not-allowed;transform:none;box-shadow:none}
@@ -248,10 +251,27 @@ function render() {
 
 // ===================== LANDING =====================
 function renderLanding() {
-  const form = h('form', { className: 'landing-form' },
-    h('input', { className: 'landing-input', type: 'text', id: 'path-input', placeholder: '/path/to/your/dataset', autofocus: '' }),
-    h('button', { className: 'landing-btn', type: 'submit', id: 'analyze-btn' }, 'Analyze')
-  );
+  const input = h('input', { className: 'landing-input', type: 'text', id: 'path-input', placeholder: '/path/to/your/dataset', autofocus: '' });
+  const browseBtn = h('button', { className: 'landing-browse-btn', type: 'button' }, 'Browse...');
+  const analyzeBtn = h('button', { className: 'landing-btn', type: 'submit', id: 'analyze-btn', disabled: true }, 'Analyze');
+  
+  input.addEventListener('input', () => {
+    analyzeBtn.disabled = !input.value.trim();
+  });
+  
+  browseBtn.addEventListener('click', async () => {
+    try {
+      const res = await apiGet('/browse');
+      if (res.path) {
+        input.value = res.path;
+        analyzeBtn.disabled = false;
+      }
+    } catch(e) { console.error('Browse failed:', e); }
+  });
+
+  const inputGroup = h('div', { className: 'landing-input-group' }, input, browseBtn);
+  const form = h('form', { className: 'landing-form' }, inputGroup, analyzeBtn);
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const path = document.getElementById('path-input').value.trim();
@@ -328,7 +348,10 @@ function renderSidebar() {
     h('span', { className: 'sidebar-icon' }, '←'), 'New Analysis'
   );
   return h('aside', { className: 'sidebar' },
-    h('div', { className: 'sidebar-brand' }, h('h1', {}, 'Dataset Inspector'), h('p', {}, 'v0.1.0')),
+    h('div', { className: 'sidebar-brand' }, 
+      h('h1', { style: { cursor: 'pointer' }, onClick: () => { report = null; render(); } }, 'Dataset Inspector'), 
+      h('p', {}, 'v0.1.0')
+    ),
     nav, newBtn
   );
 }
