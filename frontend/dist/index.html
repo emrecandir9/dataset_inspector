@@ -342,52 +342,27 @@ class ProgressQueue {
     this.jobId = jobId;
     this.es = es;
     this.currentData = null;
-    this.interpolatorId = null;
     this.isCompleting = false;
   }
   
   push(data) {
+    if (data.status === 'complete') this.isCompleting = true;
     this.queue.push(data);
     this.process();
   }
 
-  startInterpolation() {
-    if (this.interpolatorId) clearInterval(this.interpolatorId);
-    this.interpolatorId = setInterval(() => {
-      if (this.currentData && this.currentData.status === 'analyzing') {
-         if (this.currentData.stage_progress < 0.95) {
-            this.currentData.stage_progress += 0.005;
-            const pct = Math.round(this.currentData.stage_progress * 100);
-            this.currentData.message = `Analyzing (${pct}%)`;
-            updateWizard(this.currentData);
-         }
-      }
-    }, 100);
-  }
-
-  stopInterpolation() {
-    if (this.interpolatorId) {
-       clearInterval(this.interpolatorId);
-       this.interpolatorId = null;
-    }
-  }
-  
   async process() {
     if (this.isProcessing) return;
     this.isProcessing = true;
-    
-    if (!this.interpolatorId) this.startInterpolation();
     
     while (this.queue.length > 0) {
       const data = this.queue[0];
       
       if (data.status === 'complete') {
-        this.isCompleting = true;
         if (this.lastStage) {
           updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Finishing up...', message: 'Done' });
           await new Promise(r => setTimeout(r, 500));
         }
-        this.stopInterpolation();
         this.es.close();
         const res = await apiGet('/analyze/result/' + this.jobId);
         report = res.report;
@@ -398,7 +373,6 @@ class ProgressQueue {
       }
       
       if (data.status === 'error') {
-        this.stopInterpolation();
         this.es.close();
         render();
         document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
