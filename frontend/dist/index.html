@@ -343,6 +343,7 @@ class ProgressQueue {
     this.es = es;
     this.currentData = null;
     this.interpolatorId = null;
+    this.isCompleting = false;
   }
   
   push(data) {
@@ -356,6 +357,8 @@ class ProgressQueue {
       if (this.currentData && this.currentData.status === 'analyzing') {
          if (this.currentData.stage_progress < 0.95) {
             this.currentData.stage_progress += 0.005;
+            const pct = Math.round(this.currentData.stage_progress * 100);
+            this.currentData.message = `Analyzing (${pct}%)`;
             updateWizard(this.currentData);
          }
       }
@@ -379,6 +382,7 @@ class ProgressQueue {
       const data = this.queue[0];
       
       if (data.status === 'complete') {
+        this.isCompleting = true;
         if (this.lastStage) {
           updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Finishing up...', message: 'Done' });
           await new Promise(r => setTimeout(r, 500));
@@ -431,6 +435,7 @@ function startProgressStream(jobId) {
     currentQueue.push(data);
   };
   es.onerror = () => {
+    if (currentQueue && currentQueue.isCompleting) return;
     es.close();
     render();
     document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, 'Lost connection to server.'));
