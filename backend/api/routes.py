@@ -65,7 +65,14 @@ async def browse_folder() -> Dict[str, Any]:
     try:
         if sys.platform == "darwin":
             # macOS native folder picker via AppleScript
-            script = 'tell application (path to frontmost application as text) to set myFolder to choose folder\nPOSIX path of myFolder'
+            script = '''
+            tell application "System Events" to set frontApp to name of first application process whose frontmost is true
+            tell application frontApp
+                activate
+                set myFolder to choose folder
+            end tell
+            return POSIX path of myFolder
+            '''
             result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
             if result.returncode == 0:
                 return {"path": result.stdout.strip()}
