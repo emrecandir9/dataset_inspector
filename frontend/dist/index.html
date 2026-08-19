@@ -219,6 +219,11 @@ async function apiPost(url, body) {
   if (!res.ok) { const e = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(e.detail || 'Failed'); }
   return res.json();
 }
+async function apiGet(url) {
+  const res = await fetch(API + url);
+  if (!res.ok) { const e = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(e.detail || 'Failed'); }
+  return res.json();
+}
 
 // --- Utility ---
 function fmt(n) { return n == null ? '—' : Number(n).toLocaleString(); }
