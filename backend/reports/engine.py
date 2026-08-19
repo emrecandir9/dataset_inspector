@@ -140,9 +140,12 @@ def run_analysis(
     _progress(AnalysisStatus.LOADING, "Loading dataset", 0.45, 1.0, "Ready for analysis")
     
     # --- Stage 5: Run analyzers ---
-    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.50, 0.1, "Starting analysis...")
+    _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.50, 0.0, "Starting analysis...")
     
-    results = run_all_analyzers(schema, data)
+    def _analyzer_progress(stage_pct: float):
+        _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.50 + (0.35 * stage_pct), stage_pct, f"Analyzing ({stage_pct:.0%})")
+        
+    results = run_all_analyzers(schema, data, progress_callback=_analyzer_progress)
     report.analyzer_results = results
     
     _progress(AnalysisStatus.ANALYZING, "Running analyzers", 0.85, 1.0,

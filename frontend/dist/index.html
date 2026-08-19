@@ -86,8 +86,8 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 .wizard-info{flex:1;}
 .wizard-title{font-size:15px;font-weight:600;color:var(--text-primary);}
 .wizard-desc{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
-.wizard-stage.active .wizard-circle{background:conic-gradient(var(--accent) var(--progress, 0%), var(--bg-elevated) 0%);}
-.wizard-stage.active .wizard-circle::after{content:'';position:absolute;inset:3px;background:var(--bg-surface);border-radius:50%;z-index:1;}
+.wizard-stage.active .wizard-circle{background:conic-gradient(var(--color-success) var(--progress, 0%), var(--bg-elevated) 0%);}
+.wizard-stage.active .wizard-circle::after{content:'';position:absolute;inset:2px;background:var(--bg-surface);border-radius:50%;z-index:1;}
 .wizard-stage.done .wizard-circle{background:var(--color-success);transform:scale(1.05);}
 .tick-svg{stroke-dasharray:50;stroke-dashoffset:50;animation:drawTick 0.4s ease forwards;animation-delay:0.1s;}
 @keyframes drawTick{to{stroke-dashoffset:0;}}
@@ -333,23 +333,75 @@ function renderLanding() {
   );
 }
 
+class ProgressQueue {
+  constructor(jobId, es) {
+    this.queue = [];
+    this.isProcessing = false;
+    this.lastStage = null;
+    this.jobId = jobId;
+    this.es = es;
+  }
+  
+  push(data) {
+    this.queue.push(data);
+    this.process();
+  }
+  
+  async process() {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+    
+    while (this.queue.length > 0) {
+      const data = this.queue[0];
+      
+      if (data.status === 'complete') {
+        if (this.lastStage) {
+          updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Finishing up...', message: 'Done' });
+          await new Promise(r => setTimeout(r, 500));
+        }
+        this.es.close();
+        const res = await apiGet('/analyze/result/' + this.jobId);
+        report = res.report;
+        activePage = 'overview';
+        render();
+        this.queue.shift();
+        continue;
+      }
+      
+      if (data.status === 'error') {
+        this.es.close();
+        render();
+        document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
+        this.queue.shift();
+        continue;
+      }
+      
+      if (this.lastStage && this.lastStage !== data.status) {
+        // Enforce min 500ms delay for stage transition (0.25s fill, 0.25s checkmark)
+        updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Complete', message: 'Done' });
+        await new Promise(r => setTimeout(r, 500));
+      }
+      
+      this.lastStage = data.status;
+      updateWizard(data);
+      this.queue.shift();
+      
+      await new Promise(r => setTimeout(r, 20));
+    }
+    
+    this.isProcessing = false;
+  }
+}
+
+let currentQueue = null;
+
 function startProgressStream(jobId) {
   const es = new EventSource(API + '/analyze/progress/' + jobId);
+  currentQueue = new ProgressQueue(jobId, es);
+  
   es.onmessage = async (e) => {
     const data = JSON.parse(e.data);
-    if (data.status === 'complete') {
-      es.close();
-      const res = await apiGet('/analyze/result/' + jobId);
-      report = res.report;
-      activePage = 'overview';
-      render();
-    } else if (data.status === 'error') {
-      es.close();
-      render();
-      document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
-    } else {
-      updateWizard(data);
-    }
+    currentQueue.push(data);
   };
   es.onerror = () => {
     es.close();
