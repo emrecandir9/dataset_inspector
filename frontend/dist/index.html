@@ -687,7 +687,35 @@ function renderStructure() {
 // ---- Statistics ----
 function renderStatistics() {
   const cs = getResult('column_stats'), corr = getResult('correlation');
-  const page = h('div', {}, h('div', { className: 'page-header' }, h('div', {}, h('h1', { className: 'page-title' }, 'Statistics'), h('p', { className: 'page-subtitle' }, 'Per-column statistical summary'))));
+  const fi = getResult('feature_importance'), ta = getResult('text_analysis'), ts = getResult('time_series');
+  const page = h('div', {}, h('div', { className: 'page-header' }, h('div', {}, h('h1', { className: 'page-title' }, 'Statistics'), h('p', { className: 'page-subtitle' }, 'Statistical and ML feature analysis'))));
+  
+  if (fi?.metrics) {
+    const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'Feature Importance (Predictive Power)'));
+    const grid = h('div', { className: 'stats-grid' });
+    grid.appendChild(statCard('Target Column', fi.metrics['Target Column'], fi.metrics['Target Type'], 'purple'));
+    for (let i = 1; i <= 5; i++) {
+      if (fi.metrics[`#${i} Feature`]) grid.appendChild(statCard(`Rank #${i}`, fi.metrics[`#${i} Feature`].split(' (')[0], fi.metrics[`#${i} Feature`].split('(')[1].replace(')',''), 'teal'));
+    }
+    sec.appendChild(grid);
+    page.appendChild(sec);
+  }
+
+  if (ta?.metrics) {
+    const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'NLP Text Analysis'));
+    const grid = h('div', { className: 'stats-grid' });
+    Object.keys(ta.metrics).forEach(k => grid.appendChild(statCard(k, ta.metrics[k])));
+    sec.appendChild(grid);
+    page.appendChild(sec);
+  }
+
+  if (ts?.metrics) {
+    const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'Time Series Analysis'));
+    const grid = h('div', { className: 'stats-grid' });
+    Object.keys(ts.metrics).forEach(k => grid.appendChild(statCard(k.split(' - ')[1], ts.metrics[k], k.split(' - ')[0], 'blue')));
+    sec.appendChild(grid);
+    page.appendChild(sec);
+  }
   if (cs?.metrics?.columns) {
     const sec = h('div', { className: 'section' }, h('h2', { className: 'section-title' }, 'Column Summary'));
     const wrap = h('div', { className: 'table-wrap' });
@@ -790,6 +818,11 @@ function renderImages() {
     grid.appendChild(statCard('Height', m.height_min + ' – ' + m.height_max, 'Mean: ' + m.height_mean, 'blue'));
     grid.appendChild(statCard('Resolutions', m.unique_resolutions, null, 'purple'));
     grid.appendChild(statCard('File Size', fmtBytes(m.file_size_min) + ' – ' + fmtBytes(m.file_size_max), 'Mean: ' + fmtBytes(m.file_size_mean), 'teal'));
+  }
+  const ch = getResult('image_channel_stats');
+  if (ch?.metrics) {
+    grid.appendChild(statCard('RGB Means', ch.metrics['RGB Mean'], 'For Normalize()', 'purple'));
+    grid.appendChild(statCard('RGB Stds', ch.metrics['RGB Std'], 'For Normalize()', 'purple'));
   }
   if (qual?.metrics) {
     grid.appendChild(statCard('Brightness', qual.metrics.brightness_mean?.toFixed(2), 'σ = ' + qual.metrics.brightness_std?.toFixed(2), 'teal'));
