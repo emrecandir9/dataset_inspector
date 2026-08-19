@@ -90,14 +90,19 @@ class CSVLoader(DatasetLoader):
         
         # Check size — use DuckDB for large files, Polars for smaller
         use_sampling = False
-        if main_file.size_bytes > config.auto_sample_threshold_bytes and sample_size is None:
-            sample_size = config.default_sample_size
-            use_sampling = True
         
-        if sample_size:
-            # Use DuckDB for sampled reads
+        if main_file.size_bytes > config.auto_sample_threshold_bytes and sample_size is None:
             conn = duckdb.connect()
             try:
+                count_query = f"""
+                    SELECT COUNT(*) as cnt FROM read_csv_auto('{filepath}',
+                        sample_size=10000,
+                        ignore_errors=true)
+                """
+                total_rows = conn.execute(count_query).fetchone()[0]
+                sample_size = min(int(total_rows * config.sample_ratio), config.max_sample_cap)
+                use_sampling = True
+                
                 query = f"""
                     SELECT * FROM read_csv_auto('{filepath}', 
                         sample_size=10000,
@@ -105,14 +110,26 @@ class CSVLoader(DatasetLoader):
                     USING SAMPLE {sample_size}
                 """
                 df = conn.execute(query).pl()
-                
-                # Get total count
+            finally:
+                conn.close()
+        elif sample_size:
+            # User explicitly requested a sample size (or it was passed down)
+            conn = duckdb.connect()
+            try:
                 count_query = f"""
                     SELECT COUNT(*) as cnt FROM read_csv_auto('{filepath}',
                         sample_size=10000,
                         ignore_errors=true)
                 """
                 total_rows = conn.execute(count_query).fetchone()[0]
+                
+                query = f"""
+                    SELECT * FROM read_csv_auto('{filepath}', 
+                        sample_size=10000,
+                        ignore_errors=true)
+                    USING SAMPLE {sample_size}
+                """
+                df = conn.execute(query).pl()
             finally:
                 conn.close()
         else:

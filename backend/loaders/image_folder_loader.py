@@ -148,11 +148,10 @@ class ImageFolderLoader(DatasetLoader):
         actual_sample_size = None
         
         if sample_size is None:
-            if total_images > 100_000:
-                actual_sample_size = config.image_sample_thresholds["large"]
-                use_sampling = True
-            elif total_images > 10_000:
-                actual_sample_size = config.image_sample_thresholds["medium"]
+            # Dynamic 25% sampling up to 10k max
+            calculated_sample = min(int(total_images * config.sample_ratio), config.max_sample_cap)
+            if total_images > calculated_sample:
+                actual_sample_size = calculated_sample
                 use_sampling = True
         elif sample_size:
             actual_sample_size = sample_size

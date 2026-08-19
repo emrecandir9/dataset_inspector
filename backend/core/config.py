@@ -16,13 +16,8 @@ class Config(BaseModel):
     
     # Analysis
     auto_sample_threshold_bytes: int = 1_000_000_000  # 1 GB
-    default_sample_size: int = 50_000
-    max_image_sample_size: int = 50_000
-    image_sample_thresholds: dict[str, int] = {
-        "small": 10_000,   # < 10k → analyze all
-        "medium": 10_000,  # 10k-100k → sample 10k
-        "large": 50_000,   # 100k+ → sample 50k
-    }
+    sample_ratio: float = 0.25
+    max_sample_cap: int = 10_000
     
     # Image analysis
     image_extensions: set[str] = {
