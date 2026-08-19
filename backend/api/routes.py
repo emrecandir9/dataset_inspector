@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
-from backend.core.models import AnalyzeRequest, DatasetReport
+from backend.core.models import AnalyzeRequest, DatasetReport, ProgressUpdate
 from backend.reports.engine import run_analysis
 from backend.reports.html_report import export_html
 from backend.reports.json_report import export_json
@@ -20,32 +23,89 @@ router = APIRouter(prefix="/api")
 
 # In-memory store for the current report (single-user local tool)
 _current_report: Optional[DatasetReport] = None
+_jobs: Dict[str, Dict[str, Any]] = {}
 
+def analysis_task(job_id: str, request: AnalyzeRequest):
+    try:
+        def progress_cb(update: ProgressUpdate):
+            _jobs[job_id]["progress"] = update
+            
+        sample_size = request.sample_size
+        if getattr(request, "mode", "sample") == "full":
+            sample_size = None  # None disables sampling threshold overrides
+            
+        report = run_analysis(
+            dataset_path=request.path,
+            sample_size=sample_size,
+            force_type=request.force_type,
+            progress_callback=progress_cb
+        )
+        
+        global _current_report
+        _current_report = report
+        
+        _jobs[job_id]["report"] = report
+        _jobs[job_id]["status"] = "complete"
+    except Exception as e:
+        _jobs[job_id]["status"] = "error"
+        _jobs[job_id]["error"] = str(e)
 
 @router.post("/analyze")
-async def analyze_dataset(request: AnalyzeRequest) -> Dict[str, Any]:
-    """Start dataset analysis."""
-    global _current_report
-    
+async def analyze_dataset(request: AnalyzeRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    """Start dataset analysis as a background job."""
     path = request.path
-    
-    # Validate path
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail=f"Path not found: {path}")
     if not os.path.isdir(path):
         raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
     
-    try:
-        report = run_analysis(
-            dataset_path=path,
-            sample_size=request.sample_size,
-            force_type=request.force_type,
-        )
-        _current_report = report
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {
+        "status": "running",
+        "progress": None,
+        "report": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(analysis_task, job_id, request)
+    return {"status": "success", "job_id": job_id}
+
+@router.get("/analyze/progress/{job_id}")
+async def analyze_progress(job_id: str):
+    """Stream progress updates using Server-Sent Events."""
+    if job_id not in _jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
         
-        return {"status": "success", "report": report.model_dump()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async def event_generator():
+        last_progress = None
+        while True:
+            job = _jobs.get(job_id)
+            if not job:
+                break
+                
+            if job["status"] == "complete":
+                yield f"data: {json.dumps({'status': 'complete'})}\\n\\n"
+                break
+            elif job["status"] == "error":
+                yield f"data: {json.dumps({'status': 'error', 'error': job['error']})}\\n\\n"
+                break
+                
+            current_progress = job.get("progress")
+            if current_progress and current_progress != last_progress:
+                last_progress = current_progress
+                yield f"data: {current_progress.model_dump_json()}\\n\\n"
+                
+            await asyncio.sleep(0.1)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+@router.get("/analyze/result/{job_id}")
+async def analyze_result(job_id: str):
+    """Get the final report for a completed job."""
+    job = _jobs.get(job_id)
+    if not job or job["status"] != "complete":
+        raise HTTPException(status_code=404, detail="Result not ready or job not found")
+    return {"status": "success", "report": job["report"].model_dump()}
 
 
 @router.get("/report")

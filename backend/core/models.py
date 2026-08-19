@@ -249,6 +249,7 @@ class DatasetReport(BaseModel):
 class AnalyzeRequest(BaseModel):
     """Request to start an analysis."""
     path: str
+    mode: AnalysisMode = AnalysisMode.SAMPLE
     sample_size: Optional[int] = None
     force_type: Optional[str] = None  # override detected type
 

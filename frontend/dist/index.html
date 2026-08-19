@@ -76,11 +76,16 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 .landing-error{margin-top:20px;color:var(--color-error);font-size:13px;max-width:520px;padding:12px 16px;background:var(--color-error-dim);border-radius:8px}
 
 /* ---- Loading ---- */
-.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:24px}
-.spinner{width:28px;height:28px;border:2.5px solid var(--border-primary);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading-stage{font-size:15px;color:var(--text-primary);font-weight:500}
-.loading-hint{font-size:13px;color:var(--text-quaternary)}
+.loading{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:12px;width:100%;max-width:400px;margin:0 auto}
+.progress-bar{width:100%;height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;position:relative}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s ease;width:0%}
+.loading-stage{font-size:15px;color:var(--text-primary);font-weight:500;margin-top:16px}
+.loading-hint{font-size:13px;color:var(--text-tertiary);text-align:center}
+
+/* ---- Mode Toggle ---- */
+.mode-toggle{display:flex;gap:6px;background:var(--bg-surface);padding:4px;border-radius:10px;border:1px solid var(--border-primary);margin-bottom:8px;width:100%;max-width:320px}
+.mode-btn{flex:1;padding:8px 12px;border:none;background:none;color:var(--text-tertiary);font-size:12px;font-weight:500;cursor:pointer;border-radius:6px;transition:all .15s}
+.mode-btn.active{background:var(--bg-elevated);color:var(--text-primary);box-shadow:0 1px 3px rgba(0,0,0,.2)}
 
 /* ---- Page header ---- */
 .page-header{margin-bottom:40px;display:flex;justify-content:space-between;align-items:flex-start}
@@ -212,6 +217,7 @@ tr:hover td{background:var(--bg-hover)}
 const API = '/api';
 let report = null;
 let activePage = 'overview';
+let analysisMode = 'sample';
 
 // --- API ---
 async function apiPost(url, body) {
@@ -260,6 +266,12 @@ function renderLanding() {
   const browseBtn = h('button', { className: 'landing-browse-btn', type: 'button' }, 'Browse...');
   const analyzeBtn = h('button', { className: 'landing-btn', type: 'submit', id: 'analyze-btn', disabled: true }, 'Analyze');
   
+  const sampleBtn = h('button', { type: 'button', className: 'mode-btn' + (analysisMode === 'sample' ? ' active' : '') }, 'Sample (Fast)');
+  const fullBtn = h('button', { type: 'button', className: 'mode-btn' + (analysisMode === 'full' ? ' active' : '') }, 'Full (Exhaustive)');
+  sampleBtn.onclick = () => { analysisMode = 'sample'; sampleBtn.classList.add('active'); fullBtn.classList.remove('active'); };
+  fullBtn.onclick = () => { analysisMode = 'full'; fullBtn.classList.add('active'); sampleBtn.classList.remove('active'); };
+  const modeToggle = h('div', { className: 'mode-toggle' }, sampleBtn, fullBtn);
+
   input.addEventListener('input', () => {
     analyzeBtn.disabled = !input.value.trim();
   });
@@ -275,18 +287,20 @@ function renderLanding() {
   });
 
   const inputGroup = h('div', { className: 'landing-input-group' }, input, browseBtn);
-  const form = h('form', { className: 'landing-form' }, inputGroup, analyzeBtn);
+  const form = h('form', { className: 'landing-form' }, inputGroup, modeToggle, analyzeBtn);
   
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const path = document.getElementById('path-input').value.trim();
     if (!path) return;
-    showLoading('Analyzing dataset...');
+    showLoading('Starting analysis...', 0, 'Initializing job...');
     try {
-      const res = await apiPost('/analyze', { path });
-      report = res.report;
-      activePage = 'overview';
-      render();
+      const res = await apiPost('/analyze', { path, mode: analysisMode });
+      if (res.job_id) {
+        startProgressStream(res.job_id);
+      } else {
+        throw new Error('No job ID returned');
+      }
     } catch (err) {
       render();
       document.querySelector('.landing').appendChild(
@@ -308,13 +322,38 @@ function renderLanding() {
   );
 }
 
-function showLoading(msg) {
+function startProgressStream(jobId) {
+  const es = new EventSource(API + '/analyze/progress/' + jobId);
+  es.onmessage = async (e) => {
+    const data = JSON.parse(e.data);
+    if (data.status === 'complete') {
+      es.close();
+      const res = await apiGet('/analyze/result/' + jobId);
+      report = res.report;
+      activePage = 'overview';
+      render();
+    } else if (data.status === 'error') {
+      es.close();
+      render();
+      document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
+    } else {
+      showLoading(data.stage, data.progress, data.message);
+    }
+  };
+  es.onerror = () => {
+    es.close();
+    render();
+    document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, 'Lost connection to server.'));
+  };
+}
+
+function showLoading(stage, pct, detail) {
   const root = document.getElementById('root');
   root.innerHTML = '';
   root.appendChild(h('div', { className: 'loading' },
-    h('div', { className: 'spinner' }),
-    h('div', { className: 'loading-stage' }, msg),
-    h('div', { className: 'loading-hint' }, 'This may take a moment for large datasets'),
+    h('div', { className: 'progress-bar' }, h('div', { className: 'progress-fill', style: { width: (pct * 100) + '%' } })),
+    h('div', { className: 'loading-stage' }, stage),
+    h('div', { className: 'loading-hint' }, detail || 'This may take a moment for large datasets'),
   ));
 }
 
