@@ -77,12 +77,11 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 
 /* ---- Loading Wizard ---- */
 .loading-view{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;}
-.wizard{width:100%;max-width:360px;display:flex;flex-direction:column;gap:24px;}
+.wizard{width:fit-content;display:flex;flex-direction:column;gap:24px;}
 .wizard-stage{display:flex;align-items:center;gap:16px;opacity:0.4;transition:all 0.3s;}
 .wizard-stage.active, .wizard-stage.done{opacity:1;}
 .wizard-circle{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);position:relative;flex-shrink:0;transition:all 0.3s;}
 .wizard-circle .tick-svg{width:22px;height:22px;color:#fff;}
-.wizard-circle .pct{font-size:11px;font-weight:700;color:var(--text-primary);z-index:2;position:absolute;}
 .wizard-info{flex:1;}
 .wizard-title{font-size:15px;font-weight:600;color:var(--text-primary);}
 .wizard-desc{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
@@ -450,8 +449,7 @@ function initWizardDOM() {
   wizardContainer = h('div', { className: 'wizard' });
   WIZARD_STAGES.forEach(stageDef => {
     const ringSvg = `<svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="19"></circle><circle class="fg" cx="21" cy="21" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"></circle></svg>`;
-    const pctSpan = `<span class="pct">0%</span>`;
-    const circle = h('div', { className: 'wizard-circle', innerHTML: ringSvg + pctSpan, id: 'wiz-circle-' + stageDef.id });
+    const circle = h('div', { className: 'wizard-circle', innerHTML: ringSvg, id: 'wiz-circle-' + stageDef.id });
     const info = h('div', { className: 'wizard-info' },
       h('div', { className: 'wizard-title', id: 'wiz-title-' + stageDef.id }, stageDef.title),
       h('div', { className: 'wizard-desc', id: 'wiz-desc-' + stageDef.id }, 'Pending...')
@@ -483,8 +481,6 @@ function updateWizard(data) {
       
       const fg = circleEl.querySelector('.fg');
       if (fg) fg.style.strokeDashoffset = 119.38 - (119.38 * pct / 100);
-      const pctSpan = circleEl.querySelector('.pct');
-      if (pctSpan) pctSpan.textContent = pct + '%';
       
       titleEl.textContent = data.stage || stageDef.title;
       descEl.textContent = data.message || 'Pending...';
@@ -499,8 +495,7 @@ function updateWizard(data) {
       if (stageEl.className !== 'wizard-stage pending') {
         stageEl.className = 'wizard-stage pending';
         const ringSvg = `<svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="19"></circle><circle class="fg" cx="21" cy="21" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"></circle></svg>`;
-        const pctSpan = `<span class="pct">0%</span>`;
-        circleEl.innerHTML = ringSvg + pctSpan;
+        circleEl.innerHTML = ringSvg;
       }
       titleEl.textContent = stageDef.title;
       descEl.textContent = 'Pending...';
