@@ -7,6 +7,7 @@ from typing import Any
 import polars as pl
 
 from backend.analyzers.base import Analyzer
+from backend.analyzers.registry import register_analyzer
 from backend.core.models import AnalyzerResult, DatasetSchema, FieldType, Finding, Severity
 
 
@@ -80,15 +81,17 @@ class TextAnalysisAnalyzer(Analyzer):
                 if empty_pct > 5:
                     findings.append(Finding(
                         severity=Severity.WARNING,
+                        code="empty_text_fields",
                         title="Empty Text Fields",
-                        description=f"Column '{col}' contains {empty_pct:.1f}% empty or whitespace-only strings."
+                        message=f"Column '{col}' contains {empty_pct:.1f}% empty or whitespace-only strings."
                     ))
                     
                 if avg_words is not None and avg_words > 256:
                     findings.append(Finding(
                         severity=Severity.INFO,
+                        code="long_text_sequences",
                         title="Long Text Sequences",
-                        description=f"Column '{col}' has very long text (avg {avg_words:.1f} words). Standard transformer models (like BERT) may truncate these sequences unless you use Longformer or chunking."
+                        message=f"Column '{col}' has very long text (avg {avg_words:.1f} words). Standard transformer models (like BERT) may truncate these sequences unless you use Longformer or chunking."
                     ))
                     
             except Exception:
@@ -110,3 +113,5 @@ class TextAnalysisAnalyzer(Analyzer):
             findings=findings,
             chart_data=None,
         )
+
+register_analyzer(TextAnalysisAnalyzer())

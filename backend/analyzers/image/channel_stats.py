@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image
 
 from backend.analyzers.base import Analyzer
+from backend.analyzers.registry import register_analyzer
 from backend.core.models import AnalyzerResult, DatasetSchema, Finding, Severity
 
 
@@ -97,14 +98,16 @@ class ImageChannelStatsAnalyzer(Analyzer):
         if diff_mean > 0.3:
             findings.append(Finding(
                 severity=Severity.INFO,
+                code="non_standard_rgb",
                 title="Non-Standard Distribution",
-                description="Dataset RGB means deviate significantly from ImageNet defaults. We recommend using these specific means for normalization in your dataloader."
+                message="Dataset RGB means deviate significantly from ImageNet defaults. We recommend using these specific means for normalization in your dataloader."
             ))
         else:
             findings.append(Finding(
                 severity=Severity.INFO,
+                code="imagenet_like_rgb",
                 title="ImageNet-like Distribution",
-                description="Dataset RGB means are similar to ImageNet. Default normalization parameters should work well."
+                message="Dataset RGB means are similar to ImageNet. Default normalization parameters should work well."
             ))
 
         return AnalyzerResult(
@@ -115,3 +118,5 @@ class ImageChannelStatsAnalyzer(Analyzer):
             findings=findings,
             chart_data=None,
         )
+
+register_analyzer(ImageChannelStatsAnalyzer())

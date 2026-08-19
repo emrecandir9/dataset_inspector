@@ -7,6 +7,7 @@ from typing import Any
 import polars as pl
 
 from backend.analyzers.base import Analyzer
+from backend.analyzers.registry import register_analyzer
 from backend.core.models import AnalyzerResult, DatasetSchema, FieldType, Finding, Severity
 
 
@@ -131,20 +132,23 @@ class FeatureImportanceAnalyzer(Analyzer):
             if best["score"] > 0.8:
                 findings.append(Finding(
                     severity=Severity.WARNING,
+                    code="potential_target_leakage",
                     title="Potential Target Leakage",
-                    description=f"Feature '{best['feature']}' has extremely high correlation ({best['raw']:.3f}) with the target. Verify this is not a leaky feature that won't be available at inference time."
+                    message=f"Feature '{best['feature']}' has extremely high correlation ({best['raw']:.3f}) with the target. Verify this is not a leaky feature that won't be available at inference time."
                 ))
             elif best["score"] < 0.05:
                 findings.append(Finding(
                     severity=Severity.INFO,
+                    code="low_predictive_power",
                     title="Low Predictive Power",
-                    description="None of the numerical features show strong linear correlation with the target. Consider engineering new features or using non-linear models (like Random Forests)."
+                    message="None of the numerical features show strong linear correlation with the target. Consider engineering new features or using non-linear models (like Random Forests)."
                 ))
             else:
                 findings.append(Finding(
                     severity=Severity.INFO,
+                    code="strong_predictors_found",
                     title="Strong Predictors Found",
-                    description=f"'{best['feature']}' is the strongest linear predictor for the target."
+                    message=f"'{best['feature']}' is the strongest linear predictor for the target."
                 ))
 
         # Chart Data
@@ -169,3 +173,5 @@ class FeatureImportanceAnalyzer(Analyzer):
             findings=findings,
             chart_data=chart_data,
         )
+
+register_analyzer(FeatureImportanceAnalyzer())

@@ -690,7 +690,7 @@ function renderStatistics() {
   const fi = getResult('feature_importance'), ta = getResult('text_analysis'), ts = getResult('time_series');
   const page = h('div', {}, h('div', { className: 'page-header' }, h('div', {}, h('h1', { className: 'page-title' }, 'Statistics'), h('p', { className: 'page-subtitle' }, 'Statistical and ML feature analysis'))));
   
-  if (fi?.metrics) {
+  if (fi?.status === 'success' && fi.metrics && Object.keys(fi.metrics).length > 0) {
     const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'Feature Importance (Predictive Power)'));
     const grid = h('div', { className: 'stats-grid' });
     grid.appendChild(statCard('Target Column', fi.metrics['Target Column'], fi.metrics['Target Type'], 'purple'));
@@ -701,7 +701,7 @@ function renderStatistics() {
     page.appendChild(sec);
   }
 
-  if (ta?.metrics) {
+  if (ta?.status === 'success' && ta.metrics && Object.keys(ta.metrics).length > 0) {
     const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'NLP Text Analysis'));
     const grid = h('div', { className: 'stats-grid' });
     Object.keys(ta.metrics).forEach(k => grid.appendChild(statCard(k, ta.metrics[k])));
@@ -709,7 +709,7 @@ function renderStatistics() {
     page.appendChild(sec);
   }
 
-  if (ts?.metrics) {
+  if (ts?.status === 'success' && ts.metrics && Object.keys(ts.metrics).length > 0) {
     const sec = h('div', { className: 'section', style: { marginBottom: '32px' } }, h('h2', { className: 'section-title' }, 'Time Series Analysis'));
     const grid = h('div', { className: 'stats-grid' });
     Object.keys(ts.metrics).forEach(k => grid.appendChild(statCard(k.split(' - ')[1], ts.metrics[k], k.split(' - ')[0], 'blue')));
@@ -820,7 +820,7 @@ function renderImages() {
     grid.appendChild(statCard('File Size', fmtBytes(m.file_size_min) + ' – ' + fmtBytes(m.file_size_max), 'Mean: ' + fmtBytes(m.file_size_mean), 'teal'));
   }
   const ch = getResult('image_channel_stats');
-  if (ch?.metrics) {
+  if (ch?.status === 'success' && ch.metrics && Object.keys(ch.metrics).length > 0) {
     grid.appendChild(statCard('RGB Means', ch.metrics['RGB Mean'], 'For Normalize()', 'purple'));
     grid.appendChild(statCard('RGB Stds', ch.metrics['RGB Std'], 'For Normalize()', 'purple'));
   }

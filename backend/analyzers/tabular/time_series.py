@@ -7,6 +7,7 @@ from typing import Any
 import polars as pl
 
 from backend.analyzers.base import Analyzer
+from backend.analyzers.registry import register_analyzer
 from backend.core.models import AnalyzerResult, DatasetSchema, FieldType, Finding, Severity
 
 
@@ -87,3 +88,5 @@ class TimeSeriesAnalyzer(Analyzer):
             findings=findings,
             chart_data=None,
         )
+
+register_analyzer(TimeSeriesAnalyzer())
