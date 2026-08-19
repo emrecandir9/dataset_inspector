@@ -41,10 +41,14 @@ import backend.analyzers.generic.class_balance  # noqa: F401
 import backend.analyzers.tabular.column_stats  # noqa: F401
 import backend.analyzers.tabular.correlation  # noqa: F401
 import backend.analyzers.tabular.outliers  # noqa: F401
+import backend.analyzers.tabular.feature_importance  # noqa: F401
+import backend.analyzers.tabular.text_analysis  # noqa: F401
+import backend.analyzers.tabular.time_series  # noqa: F401
 import backend.analyzers.image.resolution  # noqa: F401
 import backend.analyzers.image.quality  # noqa: F401
 import backend.analyzers.image.duplicates  # noqa: F401
 import backend.analyzers.image.corrupted  # noqa: F401
+import backend.analyzers.image.channel_stats  # noqa: F401
 
 
 def run_analysis(
