@@ -82,13 +82,15 @@ body{font-family:var(--font-family);background:var(--bg-primary);color:var(--tex
 .wizard-stage.active, .wizard-stage.done{opacity:1;}
 .wizard-circle{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);position:relative;flex-shrink:0;transition:all 0.3s;}
 .wizard-circle .tick-svg{width:22px;height:22px;color:#fff;}
-.wizard-circle .pct{font-size:11px;font-weight:700;color:var(--text-primary);z-index:2;}
+.wizard-circle .pct{font-size:11px;font-weight:700;color:var(--text-primary);z-index:2;position:absolute;}
 .wizard-info{flex:1;}
 .wizard-title{font-size:15px;font-weight:600;color:var(--text-primary);}
 .wizard-desc{font-size:13px;color:var(--text-tertiary);margin-top:4px;}
-.wizard-stage.active .wizard-circle{background:conic-gradient(var(--color-success) var(--progress, 0%), var(--bg-elevated) 0%);}
-.wizard-stage.active .wizard-circle::after{content:'';position:absolute;inset:2px;background:var(--bg-surface);border-radius:50%;z-index:1;}
+.wizard-circle svg.ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);}
+.wizard-circle svg.ring circle.bg{stroke:var(--bg-elevated);stroke-width:2;fill:none;}
+.wizard-circle svg.ring circle.fg{stroke:var(--color-success);stroke-width:2;fill:none;stroke-linecap:round;transition:stroke-dashoffset 0.3s ease;}
 .wizard-stage.done .wizard-circle{background:var(--color-success);transform:scale(1.05);}
+.wizard-stage.done .wizard-circle svg.ring{display:none;}
 .tick-svg{stroke-dasharray:50;stroke-dashoffset:50;animation:drawTick 0.4s ease forwards;animation-delay:0.1s;}
 @keyframes drawTick{to{stroke-dashoffset:0;}}
 
@@ -340,16 +342,39 @@ class ProgressQueue {
     this.lastStage = null;
     this.jobId = jobId;
     this.es = es;
+    this.currentData = null;
+    this.interpolatorId = null;
   }
   
   push(data) {
     this.queue.push(data);
     this.process();
   }
+
+  startInterpolation() {
+    if (this.interpolatorId) clearInterval(this.interpolatorId);
+    this.interpolatorId = setInterval(() => {
+      if (this.currentData && this.currentData.status === 'analyzing') {
+         if (this.currentData.stage_progress < 0.95) {
+            this.currentData.stage_progress += 0.005;
+            updateWizard(this.currentData);
+         }
+      }
+    }, 100);
+  }
+
+  stopInterpolation() {
+    if (this.interpolatorId) {
+       clearInterval(this.interpolatorId);
+       this.interpolatorId = null;
+    }
+  }
   
   async process() {
     if (this.isProcessing) return;
     this.isProcessing = true;
+    
+    if (!this.interpolatorId) this.startInterpolation();
     
     while (this.queue.length > 0) {
       const data = this.queue[0];
@@ -359,6 +384,7 @@ class ProgressQueue {
           updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Finishing up...', message: 'Done' });
           await new Promise(r => setTimeout(r, 500));
         }
+        this.stopInterpolation();
         this.es.close();
         const res = await apiGet('/analyze/result/' + this.jobId);
         report = res.report;
@@ -369,6 +395,7 @@ class ProgressQueue {
       }
       
       if (data.status === 'error') {
+        this.stopInterpolation();
         this.es.close();
         render();
         document.querySelector('.landing').appendChild(h('div', { className: 'landing-error' }, data.error || 'Analysis failed'));
@@ -377,13 +404,14 @@ class ProgressQueue {
       }
       
       if (this.lastStage && this.lastStage !== data.status) {
-        // Enforce min 500ms delay for stage transition (0.25s fill, 0.25s checkmark)
-        updateWizard({ status: this.lastStage, stage_progress: 1.0, stage: 'Complete', message: 'Done' });
+        const prevData = { ...this.currentData, status: this.lastStage, stage_progress: 1.0, message: 'Done' };
+        updateWizard(prevData);
         await new Promise(r => setTimeout(r, 500));
       }
       
       this.lastStage = data.status;
-      updateWizard(data);
+      this.currentData = { ...data };
+      updateWizard(this.currentData);
       this.queue.shift();
       
       await new Promise(r => setTimeout(r, 20));
@@ -418,42 +446,54 @@ const WIZARD_STAGES = [
   { id: 'analyzing', title: 'Running Analyzers' }
 ];
 
-function updateWizard(data) {
-  if (!wizardContainer) {
-    wizardContainer = h('div', { className: 'wizard' });
-    const root = document.getElementById('root');
-    root.innerHTML = '';
-    root.appendChild(h('div', { className: 'loading-view' }, wizardContainer));
-  }
-  
-  wizardContainer.innerHTML = '';
-  let currentFound = false;
-  
+function initWizardDOM() {
+  wizardContainer = h('div', { className: 'wizard' });
   WIZARD_STAGES.forEach(stageDef => {
-    let state = 'pending';
-    let pct = 0;
+    const ringSvg = `<svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="19"></circle><circle class="fg" cx="21" cy="21" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"></circle></svg>`;
+    const pctSpan = `<span class="pct">0%</span>`;
+    const circle = h('div', { className: 'wizard-circle', innerHTML: ringSvg + pctSpan, id: 'wiz-circle-' + stageDef.id });
+    const info = h('div', { className: 'wizard-info' },
+      h('div', { className: 'wizard-title', id: 'wiz-title-' + stageDef.id }, stageDef.title),
+      h('div', { className: 'wizard-desc', id: 'wiz-desc-' + stageDef.id }, 'Pending...')
+    );
+    wizardContainer.appendChild(h('div', { className: 'wizard-stage pending', id: 'wiz-stage-' + stageDef.id }, circle, info));
+  });
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+  root.appendChild(h('div', { className: 'loading-view' }, wizardContainer));
+}
+
+function updateWizard(data) {
+  if (!wizardContainer) initWizardDOM();
+  
+  let currentFound = false;
+  WIZARD_STAGES.forEach(stageDef => {
+    const stageEl = document.getElementById('wiz-stage-' + stageDef.id);
+    const circleEl = document.getElementById('wiz-circle-' + stageDef.id);
+    const titleEl = document.getElementById('wiz-title-' + stageDef.id);
+    const descEl = document.getElementById('wiz-desc-' + stageDef.id);
+    if (!stageEl) return;
     
     if (data.status === stageDef.id) {
-      state = 'active';
-      pct = Math.round((data.stage_progress || 0) * 100);
+      if (stageEl.className !== 'wizard-stage active') stageEl.className = 'wizard-stage active';
+      let pct = Math.round((data.stage_progress || 0) * 100);
+      pct = Math.min(100, Math.max(0, pct));
+      
+      const fg = circleEl.querySelector('.fg');
+      if (fg) fg.style.strokeDashoffset = 119.38 - (119.38 * pct / 100);
+      const pctSpan = circleEl.querySelector('.pct');
+      if (pctSpan) pctSpan.textContent = pct + '%';
+      
+      titleEl.textContent = data.stage || stageDef.title;
+      descEl.textContent = data.message;
       currentFound = true;
     } else if (!currentFound) {
-      state = 'done';
-      pct = 100;
+      if (stageEl.className !== 'wizard-stage done') {
+        stageEl.className = 'wizard-stage done';
+        circleEl.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="tick-svg"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+      }
+      descEl.textContent = 'Complete';
     }
-    
-    const checkSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="tick-svg"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-    const circleInner = state === 'done' ? checkSvg : `<span class="pct">${pct}%</span>`;
-    
-    const circleStyle = state === 'active' ? { '--progress': pct + '%' } : {};
-    const circle = h('div', { className: 'wizard-circle', innerHTML: circleInner, style: circleStyle });
-    
-    const info = h('div', { className: 'wizard-info' },
-      h('div', { className: 'wizard-title' }, state === 'active' ? (data.stage || stageDef.title) : stageDef.title),
-      h('div', { className: 'wizard-desc' }, state === 'active' ? data.message : (state === 'done' ? 'Complete' : 'Pending...'))
-    );
-    
-    wizardContainer.appendChild(h('div', { className: 'wizard-stage ' + state }, circle, info));
   });
 }
 
