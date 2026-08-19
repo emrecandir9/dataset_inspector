@@ -466,15 +466,17 @@ function initWizardDOM() {
 function updateWizard(data) {
   if (!wizardContainer) initWizardDOM();
   
-  let currentFound = false;
-  WIZARD_STAGES.forEach(stageDef => {
+  let activeIndex = WIZARD_STAGES.findIndex(s => s.id === data.status);
+  if (data.status === 'complete' || data.status === 'error') activeIndex = 999;
+  
+  WIZARD_STAGES.forEach((stageDef, index) => {
     const stageEl = document.getElementById('wiz-stage-' + stageDef.id);
     const circleEl = document.getElementById('wiz-circle-' + stageDef.id);
     const titleEl = document.getElementById('wiz-title-' + stageDef.id);
     const descEl = document.getElementById('wiz-desc-' + stageDef.id);
     if (!stageEl) return;
     
-    if (data.status === stageDef.id) {
+    if (index === activeIndex) {
       if (stageEl.className !== 'wizard-stage active') stageEl.className = 'wizard-stage active';
       let pct = Math.round((data.stage_progress || 0) * 100);
       pct = Math.min(100, Math.max(0, pct));
@@ -485,14 +487,23 @@ function updateWizard(data) {
       if (pctSpan) pctSpan.textContent = pct + '%';
       
       titleEl.textContent = data.stage || stageDef.title;
-      descEl.textContent = data.message;
-      currentFound = true;
-    } else if (!currentFound) {
+      descEl.textContent = data.message || 'Pending...';
+    } else if (index < activeIndex) {
       if (stageEl.className !== 'wizard-stage done') {
         stageEl.className = 'wizard-stage done';
         circleEl.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="tick-svg"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
       }
+      titleEl.textContent = stageDef.title;
       descEl.textContent = 'Complete';
+    } else {
+      if (stageEl.className !== 'wizard-stage pending') {
+        stageEl.className = 'wizard-stage pending';
+        const ringSvg = `<svg class="ring" viewBox="0 0 42 42"><circle class="bg" cx="21" cy="21" r="19"></circle><circle class="fg" cx="21" cy="21" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"></circle></svg>`;
+        const pctSpan = `<span class="pct">0%</span>`;
+        circleEl.innerHTML = ringSvg + pctSpan;
+      }
+      titleEl.textContent = stageDef.title;
+      descEl.textContent = 'Pending...';
     }
   });
 }
