@@ -84,16 +84,16 @@ async def analyze_progress(job_id: str):
                 break
                 
             if job["status"] == "complete":
-                yield f"data: {json.dumps({'status': 'complete'})}\\n\\n"
+                yield f"data: {json.dumps({'status': 'complete'})}\n\n"
                 break
             elif job["status"] == "error":
-                yield f"data: {json.dumps({'status': 'error', 'error': job['error']})}\\n\\n"
+                yield f"data: {json.dumps({'status': 'error', 'error': job['error']})}\n\n"
                 break
                 
             current_progress = job.get("progress")
             if current_progress and current_progress != last_progress:
                 last_progress = current_progress
-                yield f"data: {current_progress.model_dump_json()}\\n\\n"
+                yield f"data: {current_progress.model_dump_json()}\n\n"
                 
             await asyncio.sleep(0.1)
             
