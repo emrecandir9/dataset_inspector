@@ -28,6 +28,7 @@ from backend.loaders.base import get_loader
 from backend.scanner.filesystem import scan_directory
 
 # Import loaders to register them
+import backend.loaders.smart_mixed_loader  # noqa: F401
 import backend.loaders.csv_loader  # noqa: F401
 import backend.loaders.json_loader  # noqa: F401
 import backend.loaders.parquet_loader  # noqa: F401
@@ -186,7 +187,10 @@ def _load_tabular_data(
     for ext in [".csv", ".tsv", ".parquet", ".pq", ".json", ".jsonl", ".ndjson", ".xlsx", ".xls"]:
         matching = [f for f in scan.file_list if f.extension == ext]
         if matching:
-            main_file = max(matching, key=lambda f: f.size_bytes)
+            valid_matching = [f for f in matching if "submission" not in f.path.lower()]
+            if not valid_matching:
+                valid_matching = matching
+            main_file = max(valid_matching, key=lambda f: f.size_bytes)
             filepath = root / main_file.path
             
             try:
@@ -237,7 +241,7 @@ def _generate_examples(
                 "data": {k: _serialize_value(v) for k, v in row.items()},
             })
     
-    elif "images" in schema.capabilities and schema._file_paths:
+    if "images" in schema.capabilities and schema._file_paths:
         import random
         random.seed(42)
         sample_paths = random.sample(

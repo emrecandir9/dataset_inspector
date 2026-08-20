@@ -99,7 +99,28 @@ def export_markdown(report: DatasetReport, output_path: str | None = None) -> st
                 if not isinstance(value, (list, dict)):
                     lines.append(f"- **{key}**: {value}")
             lines.append("")
-    
+            
+    # Examples
+    if report.examples:
+        lines.append("## Examples\n")
+        img_examples = [e for e in report.examples if e["type"] == "image"]
+        if img_examples:
+            lines.append(f"**{len(img_examples)} Image Examples Available** (View in UI to see thumbnails)")
+            for ex in img_examples[:5]:
+                lines.append(f"- {ex.get('relative_path', ex.get('path'))}")
+            lines.append("")
+            
+        tab_examples = [e for e in report.examples if e["type"] == "tabular"]
+        if tab_examples:
+            lines.append(f"**{len(tab_examples)} Tabular Examples**")
+            cols = list(tab_examples[0]["data"].keys())
+            lines.append(f"| {' | '.join(cols)} |")
+            lines.append(f"|{'|'.join(['---'] * len(cols))}|")
+            for ex in tab_examples[:5]:
+                row = [str(ex["data"].get(c, "")) for c in cols]
+                lines.append(f"| {' | '.join(row)} |")
+            lines.append("")
+            
     md = "\n".join(lines)
     
     if output_path:

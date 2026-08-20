@@ -84,6 +84,16 @@ def detect_format(scan: ScanResult) -> DetectionReport:
             loader_id="image_folder",
         ))
     
+    # --- Mixed Multimodal detection ---
+    if tabular_count > 0 and image_count > 0:
+        hypotheses.append(DetectionResult(
+            dataset_type="mixed_multimodal",
+            modality=Modality.IMAGE,
+            confidence=0.98,
+            reason=f"Found {tabular_count} tabular file(s) and {image_count} image(s)",
+            loader_id="smart_mixed",
+        ))
+        
     # --- CSV detection ---
     if tabular_count > 0:
         csv_count = ext_counts.get(".csv", 0) + ext_counts.get(".tsv", 0)
